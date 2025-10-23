@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <title>에임 트레이너 - 이미지 타겟 버전</title>
+  <meta charset="UTF-8" />
+  <title>에임 트레이너 - 클릭한 점만 갱신</title>
   <style>
     html, body {
       margin: 0;
       padding: 0;
       overflow: hidden;
-      background-color: skyblue; /* ✅ 배경 하늘색으로 변경 */
+      background-color: #87CEEB; /* 하늘색 배경 */
       color: white;
       font-family: sans-serif;
       user-select: none;
@@ -18,6 +18,7 @@
       position: absolute;
       top: 10px;
       font-size: 20px;
+      text-shadow: 0 0 5px rgba(0,0,0,0.7);
     }
     #score { left: 10px; }
     #timer { right: 10px; }
@@ -34,7 +35,7 @@
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      background: rgba(0, 0, 0, 0.5);
+      background: rgba(0, 0, 0, 0.85);
     }
 
     #startScreen input, #startScreen select {
@@ -70,6 +71,7 @@
       border-radius: 12px;
       text-align: center;
       display: none;
+      color: white;
     }
 
     #leaderboard h2 { margin-top: 0; }
@@ -77,6 +79,8 @@
     #leaderboard ol {
       text-align: left;
       padding-left: 20px;
+      max-height: 300px;
+      overflow-y: auto;
     }
 
     #leaderboard button {
@@ -102,7 +106,7 @@
 
   <div id="startScreen">
     <h1>🎯 에임 트레이너</h1>
-    <input id="nicknameInput" type="text" placeholder="닉네임을 입력하세요">
+    <input id="nicknameInput" type="text" placeholder="닉네임을 입력하세요" />
     <select id="difficultySelect">
       <option value="easy">쉬움</option>
       <option value="normal" selected>보통</option>
@@ -113,6 +117,11 @@
 
   <div id="leaderboard">
     <h2>🏆 순위표</h2>
+    <div id="leaderboardTabs" style="margin-bottom:10px;">
+      <button data-diff="easy" class="tabBtn">쉬움</button>
+      <button data-diff="normal" class="tabBtn">보통</button>
+      <button data-diff="hard" class="tabBtn">어려움</button>
+    </div>
     <ol id="leaderboardList"></ol>
     <button id="retryButton">다시 하기</button>
   </div>
@@ -129,27 +138,29 @@
     const leaderboard = document.getElementById("leaderboard");
     const leaderboardList = document.getElementById("leaderboardList");
     const retryButton = document.getElementById("retryButton");
+    const leaderboardTabs = document.getElementById("leaderboardTabs");
 
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    // 🔹 타겟 이미지 로드
-    const targetImg = new Image();
-    targetImg.src = "대광.png";
-
     let nickname = "";
     let score = 0;
-    let timeLeft = 20; // ✅ 20초로 유지
+    let timeLeft = 20;  // 20초로 변경
     let gameRunning = false;
     let targets = [];
     let timerInterval;
     let difficultySettings;
+    let currentDifficulty = "normal"; // 순위표 탭용
 
     const difficulties = {
       easy: { targetCount: 3, minRadius: 30, maxRadius: 50 },
       normal: { targetCount: 5, minRadius: 20, maxRadius: 40 },
       hard: { targetCount: 7, minRadius: 15, maxRadius: 30 }
     };
+
+    // 마크 이미지 로드
+    const markImg = new Image();
+    markImg.src = "대광.png";
 
     function random(min, max) {
       return Math.random() * (max - min) + min;
@@ -171,15 +182,18 @@
 
     function drawTargets() {
       targets.forEach(t => {
-        if (targetImg.complete) {
-          ctx.drawImage(
-            targetImg,
-            t.x - t.radius,
-            t.y - t.radius,
-            t.radius * 2,
-            t.radius * 2
-          );
+        // 이미지 중심에 맞게 그리기
+        const size = t.radius * 2;
+        if(markImg.complete) {
+          ctx.drawImage(markImg, t.x - t.radius, t.y - t.radius, size, size);
+          // 중앙 원 표시 (중앙 클릭 영역 표시용)
+          ctx.beginPath();
+          ctx.strokeStyle = "yellow";
+          ctx.lineWidth = 2;
+          ctx.arc(t.x, t.y, 5, 0, Math.PI * 2);
+          ctx.stroke();
         } else {
+          // 이미지 로딩 전에는 원으로 표시
           ctx.beginPath();
           ctx.arc(t.x, t.y, t.radius, 0, Math.PI * 2);
           ctx.fillStyle = "red";
@@ -197,7 +211,6 @@
       if (gameRunning) requestAnimationFrame(gameLoop);
     }
 
-    // ✅ 클릭 시 중심 여부에 따라 점수 다르게
     canvas.addEventListener("click", (e) => {
       if (!gameRunning) return;
 
@@ -207,15 +220,19 @@
         const dy = e.clientY - t.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
 
-        if (distance < t.radius) {
-          // 중앙 클릭 판정: 반지름의 30% 이내
-          if (distance < t.radius * 0.3) {
-            score += 2; // ✅ 중심 클릭 시 2점
-          } else {
-            score += 1; // 일반 클릭 시 1점
-          }
+        // 중앙 5px 반경 클릭 시 2점 부여
+        if (distance < 5) {
+          score += 2;
           scoreEl.textContent = `점수: ${score}`;
-          targets[i] = createTarget(); // 클릭된 타겟만 갱신
+          targets[i] = createTarget();
+          return;
+        }
+
+        // 타겟 반경 내 클릭 시 1점 부여
+        if (distance < t.radius) {
+          score++;
+          scoreEl.textContent = `점수: ${score}`;
+          targets[i] = createTarget();
           return;
         }
       }
@@ -229,6 +246,8 @@
       }
       nickname = name;
       difficultySettings = difficulties[difficultySelect.value];
+      timeLeft = 20;
+      currentDifficulty = difficultySelect.value;
       startScreen.style.display = "none";
       startGame();
     });
@@ -260,20 +279,23 @@
       gameRunning = false;
       clearInterval(timerInterval);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      saveScore(nickname, score);
-      showLeaderboard();
+      saveScore(nickname, score, currentDifficulty);
+      showLeaderboard(currentDifficulty);
     }
 
-    function saveScore(name, score) {
-      let scores = JSON.parse(localStorage.getItem("aimScores") || "[]");
-      scores.push({ name, score });
-      scores.sort((a, b) => b.score - a.score);
-      scores = scores.slice(0, 10);
-      localStorage.setItem("aimScores", JSON.stringify(scores));
+    function saveScore(name, score, difficulty) {
+      let allScores = JSON.parse(localStorage.getItem("aimScores") || "{}");
+      if (!allScores[difficulty]) allScores[difficulty] = [];
+      allScores[difficulty].push({ name, score });
+      allScores[difficulty].sort((a, b) => b.score - a.score);
+      allScores[difficulty] = allScores[difficulty].slice(0, 10);
+      localStorage.setItem("aimScores", JSON.stringify(allScores));
     }
 
-    function showLeaderboard() {
-      const scores = JSON.parse(localStorage.getItem("aimScores") || "[]");
+    function showLeaderboard(diff) {
+      currentDifficulty = diff;
+      const allScores = JSON.parse(localStorage.getItem("aimScores") || "{}");
+      const scores = allScores[diff] || [];
       leaderboardList.innerHTML = "";
       scores.forEach((s, i) => {
         const li = document.createElement("li");
@@ -283,9 +305,38 @@
       leaderboard.style.display = "block";
     }
 
+    leaderboardTabs.addEventListener("click", (e) => {
+      if (e.target.classList.contains("tabBtn")) {
+        showLeaderboard(e.target.dataset.diff);
+      }
+    });
+
     window.addEventListener("resize", () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
+    });
+
+    // 관리자용: Shift + D + A 동시에 누르면 순위 초기화
+    let keysPressed = {};
+    window.addEventListener("keydown", (e) => {
+      keysPressed[e.code] = true;
+      if (keysPressed["ShiftLeft"] || keysPressed["ShiftRight"]) {
+        if (keysPressed["KeyD"] && keysPressed["KeyA"]) {
+          if (confirm("순위표를 초기화하시겠습니까?")) {
+            localStorage.removeItem("aimScores");
+            alert("순위표가 초기화되었습니다.");
+            if (leaderboard.style.display === "block") {
+              leaderboardList.innerHTML = "";
+            }
+          }
+          // 초기화 후 상태 리셋
+          keysPressed = {};
+        }
+      }
+    });
+
+    window.addEventListener("keyup", (e) => {
+      delete keysPressed[e.code];
     });
   </script>
 </body>
