@@ -148,6 +148,9 @@
   <div id="timer">시간: 20</div>
   <canvas id="gameCanvas"></canvas>
 
+  <!-- 🎵 배경 음악 추가 -->
+  <audio id="bgm" src="에임 노래.mp3" preload="auto"></audio>
+
   <div id="startScreen">
     <h1>🎯 에임 트레이너</h1>
     <input id="nicknameInput" type="text" placeholder="닉네임을 입력하세요" maxlength="15" />
@@ -177,6 +180,7 @@
     const leaderboard = document.getElementById("leaderboard");
     const leaderboardContents = document.getElementById("leaderboardContents");
     const retryButton = document.getElementById("retryButton");
+    const bgm = document.getElementById("bgm");
 
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -191,12 +195,11 @@
     let difficulty = "normal";
 
     const difficulties = {
-      easy: { targetCount: 3, minRadius: 30, maxRadius: 50, desc: "쉬움: 큰 타겟(30~50px), 3개" },
-      normal: { targetCount: 5, minRadius: 20, maxRadius: 40, desc: "보통: 중간 크기 타겟(20~40px), 5개" },
-      hard: { targetCount: 7, minRadius: 15, maxRadius: 30, desc: "어려움: 작은 타겟(15~30px), 7개" }
+      easy: { targetCount: 3, minRadius: 30, maxRadius: 50 },
+      normal: { targetCount: 5, minRadius: 20, maxRadius: 40 },
+      hard: { targetCount: 7, minRadius: 15, maxRadius: 30 }
     };
 
-    // 이미지 불러오기 (마크 이미지)
     const markImg = new Image();
     markImg.src = "대광.png";
 
@@ -220,11 +223,8 @@
 
     function drawTargets() {
       targets.forEach(t => {
-        // 이미지 크기 조정 (마크가 타겟 원 크기 안에 들어가도록)
         const size = t.radius * 2;
         ctx.drawImage(markImg, t.x - t.radius, t.y - t.radius, size, size);
-
-        // 원 테두리
         ctx.beginPath();
         ctx.arc(t.x, t.y, t.radius, 0, Math.PI * 2);
         ctx.strokeStyle = "white";
@@ -239,7 +239,6 @@
       if (gameRunning) requestAnimationFrame(gameLoop);
     }
 
-    // 중앙 클릭 이펙트 생성
     function createEffect(x, y) {
       const effect = document.createElement("div");
       effect.className = "effect-circle";
@@ -254,29 +253,22 @@
     canvas.addEventListener("click", (e) => {
       if (!gameRunning) return;
 
-      // 중앙 타겟인지 확인 (중앙은 targets 배열의 중간 타겟으로 정해보자)
-      // 여기서 중앙 타겟은 배열 가운데 인덱스
       const centerIndex = Math.floor(targets.length / 2);
       const centerTarget = targets[centerIndex];
-
-      // 클릭이 중앙 타겟 범위 안인지 체크
       const dxCenter = e.clientX - centerTarget.x;
       const dyCenter = e.clientY - centerTarget.y;
       const distCenter = Math.sqrt(dxCenter * dxCenter + dyCenter * dyCenter);
 
       if (distCenter < centerTarget.radius) {
-        // 중앙 타겟 클릭 시 2점 + 이펙트
         score += 2;
         scoreEl.textContent = `점수: ${score}`;
         createEffect(centerTarget.x, centerTarget.y);
-        // 중앙 타겟만 갱신
         targets[centerIndex] = createTarget();
         return;
       }
 
-      // 다른 타겟들 클릭 체크
       for (let i = 0; i < targets.length; i++) {
-        if (i === centerIndex) continue; // 중앙은 이미 체크했으니까 건너뜀
+        if (i === centerIndex) continue;
         const t = targets[i];
         const dx = e.clientX - t.x;
         const dy = e.clientY - t.y;
@@ -284,9 +276,8 @@
         if (distance < t.radius) {
           score++;
           scoreEl.textContent = `점수: ${score}`;
-          // 클릭된 점만 새로운 위치로 갱신
           targets[i] = createTarget();
-          return; // 한 번 클릭당 하나만 처리
+          return;
         }
       }
     });
@@ -311,6 +302,12 @@
     });
 
     function startGame() {
+      // 🎵 배경음악 재생
+      bgm.currentTime = 0;
+      bgm.play().catch(() => {
+        console.log("사용자 상호작용이 필요합니다."); // 일부 브라우저 제한
+      });
+
       score = 0;
       timeLeft = 20;
       scoreEl.textContent = `점수: ${score}`;
@@ -331,11 +328,15 @@
       gameRunning = false;
       clearInterval(timerInterval);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // 🎵 음악 정지
+      bgm.pause();
+      bgm.currentTime = 0;
+
       saveScore(nickname, score, difficulty);
       showLeaderboard();
     }
 
-    // 난도별로 점수 저장 및 관리
     function saveScore(name, score, diff) {
       let allScores = JSON.parse(localStorage.getItem("aimScores") || "{}");
       if (!allScores[diff]) allScores[diff] = [];
@@ -349,7 +350,6 @@
       let allScores = JSON.parse(localStorage.getItem("aimScores") || "{}");
       leaderboardContents.innerHTML = "";
 
-      // 쉬움, 보통, 어려움 순서로 출력
       ["easy", "normal", "hard"].forEach(diff => {
         const diffTitle = document.createElement("div");
         diffTitle.className = "difficulty-title";
@@ -375,9 +375,8 @@
       leaderboard.style.display = "block";
     }
 
-    // 관리자용 순위표 초기화: Shift + D + A 동시 누르면 초기화
+    // 관리자용 초기화
     const keysPressed = new Set();
-
     window.addEventListener("keydown", (e) => {
       keysPressed.add(e.code);
       if (
@@ -393,16 +392,11 @@
         }
       }
     });
-
-    window.addEventListener("keyup", (e) => {
-      keysPressed.delete(e.code);
-    });
-
+    window.addEventListener("keyup", (e) => keysPressed.delete(e.code));
     window.addEventListener("resize", () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     });
-
   </script>
 </body>
 </html>
